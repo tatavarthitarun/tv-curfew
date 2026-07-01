@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TV Curfew — What was built &amp; how</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#2b3444;
+    --ink:#e6edf3; --dim:#9aa7b4; --accent:#ffd54f; --ok:#3fb950; --warn:#f0883e; --bad:#f85149;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  .wrap{max-width:920px;margin:0 auto;padding:40px 22px 90px}
+  header{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:12px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:.3px}
+  h1 .moon{color:var(--accent)}
+  .sub{color:var(--dim);font-size:15px}
+  h2{font-size:20px;margin:38px 0 12px;padding-top:10px;border-top:1px solid var(--line)}
+  h3{font-size:16px;margin:22px 0 8px;color:var(--accent)}
+  p{margin:10px 0}
+  code{font-family:var(--mono);font-size:.88em;background:#22293400;color:var(--accent)}
+  pre{background:#0a0e14;border:1px solid var(--line);border-radius:10px;padding:14px 16px;
+    overflow:auto;font-family:var(--mono);font-size:13px;line-height:1.5;color:#cdd6e0}
+  pre .c{color:#6b7684}         /* comment */
+  pre .g{color:var(--ok)}       /* good/output */
+  pre .y{color:var(--accent)}   /* highlight */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:680px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .card h3{margin-top:0}
+  .pill{display:inline-block;font-size:12px;padding:2px 9px;border-radius:20px;
+    border:1px solid var(--line);color:var(--dim);margin:0 6px 6px 0}
+  .callout{border-left:3px solid var(--warn);background:var(--panel2);
+    border-radius:0 10px 10px 0;padding:12px 16px;margin:16px 0}
+  .callout.ok{border-color:var(--ok)}
+  .callout.bad{border-color:var(--bad)}
+  .step{display:flex;gap:14px;margin:14px 0;align-items:flex-start}
+  .num{flex:0 0 30px;height:30px;border-radius:50%;background:var(--accent);color:#111;
+    font-weight:700;display:grid;place-items:center;font-size:14px}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);color:var(--dim);font-weight:600}
+  .ok-t{color:var(--ok);font-weight:600}
+  .file{font-family:var(--mono);color:var(--accent);font-size:13px}
+  ul{margin:8px 0;padding-left:22px}
+  li{margin:5px 0}
+  footer{margin-top:50px;color:var(--dim);font-size:13px;text-align:center;border-top:1px solid var(--line);padding-top:18px}
+  .tag{font-family:var(--mono);font-size:12px;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1><span class="moon">&#9790;</span> TV Curfew</h1>
+  <div class="sub">An Android TV app that forces the TV into standby whenever anyone turns it on between
+  <b>9:00&nbsp;PM</b> and <b>10:00&nbsp;AM</b> — no warning, no prompt. Built &amp; verified from the command line.</div>
+  <div style="margin-top:14px">
+    <span class="pill">Kotlin</span><span class="pill">minSdk 21 &middot; target 34</span>
+    <span class="pill">AGP 8.9 &middot; Gradle 8.13</span><span class="pill">DeviceAdmin lockNow()</span>
+    <span class="pill">No root</span><span class="pill">Tested on Android TV emulator (API 34)</span>
+  </div>
+</header>
+
+<!-- ============ THE CONSTRAINT ============ -->
+<h2>1&nbsp;&middot;&nbsp;The one hard truth first</h2>
+<div class="callout bad">
+  <b>Android has no public API to fully power a device off.</b> <code>PowerManager</code> has no
+  shutdown method; the real <code>SHUTDOWN</code>/<code>REBOOT</code> permissions are
+  <span class="tag">signature|privileged</span> — granted only to platform-signed system apps or root.
+  A sideloaded personal app <b>cannot cut the power</b> unless the TV is rooted.
+</div>
+<p>So "shut it down" is implemented as the next best thing that needs no root and behaves identically to
+pressing the remote's power button:</p>
+<div class="callout ok">
+  <b>DeviceAdmin &rarr; <code>DevicePolicyManager.lockNow()</code> &rarr; standby (screen off).</b>
+  Paired with a watcher that re-locks instantly on every wake, the result is exactly the goal:
+  the moment anyone turns the TV on during curfew, it drops straight back to standby.
+</div>
+
+<!-- ============ HOW IT WORKS ============ -->
+<h2>2&nbsp;&middot;&nbsp;How the enforcement works</h2>
+<p>Three independent mechanisms cover every way the TV can come alive during the window:</p>
+<div class="grid">
+  <div class="card"><h3>&#9889; Instant re-lock</h3>
+    A foreground service holds a runtime <code>ACTION_SCREEN_ON</code> receiver (that broadcast can't be
+    declared in the manifest since Android 7). Any wake &rarr; check the clock &rarr; if in curfew,
+    <code>lockNow()</code>. Reaction time &asymp; instant.</div>
+  <div class="card"><h3>&#128337; 60-second heartbeat</h3>
+    While inside curfew, an exact <code>AlarmManager</code> alarm re-arms itself every 60&nbsp;s and
+    re-locks — a backstop in case a screen-on broadcast is ever missed. Outside curfew it sleeps until
+    the next 9&nbsp;PM.</div>
+  <div class="card"><h3>&#128260; Survives reboot</h3>
+    A <code>BOOT_COMPLETED</code> / <code>MY_PACKAGE_REPLACED</code> receiver restarts the service after a
+    power cycle or app update, so turning the TV on during curfew locks it before you see anything.</div>
+  <div class="card"><h3>&#127925; Single source of truth</h3>
+    Every path calls one gate, <code>CurfewLogic.isCurfew()</code>: <code>hour &gt;= 21 || hour &lt; 10</code>.
+    Window is <code>[21:00, 10:00)</code> spanning midnight.</div>
+  <div class="card"><h3>&#128737; Kill-resistant watchdog</h3>
+    A <code>WorkManager</code> periodic worker (15-min floor) persists across app-death <em>and</em> reboots.
+    If an aggressive OEM power manager kills the service and cancels the alarms, the worker still fires:
+    it locks directly (no service needed), then re-starts the service and re-arms the alarms.</div>
+</div>
+
+<!-- ============ FILES ============ -->
+<h2>3&nbsp;&middot;&nbsp;What&rsquo;s in the project</h2>
+<p class="tag">~/Projects/tv-curfew/</p>
+<table>
+  <tr><th>File</th><th>Role</th></tr>
+  <tr><td class="file">CurfewLogic.kt</td><td>The pure time-gate. 9&nbsp;PM&ndash;10&nbsp;AM decision. Unit-tested.</td></tr>
+  <tr><td class="file">CurfewEnforcer.kt</td><td>Decides &amp; performs the lock (<code>lockNow()</code>); checks device-admin state.</td></tr>
+  <tr><td class="file">CurfewService.kt</td><td>Foreground service; registers the screen-on watcher; enforces on start.</td></tr>
+  <tr><td class="file">CurfewAlarmReceiver.kt</td><td>The 60&nbsp;s heartbeat + next-9&nbsp;PM exact alarm scheduler.</td></tr>
+  <tr><td class="file">CurfewWorker.kt</td><td>WorkManager watchdog (15&nbsp;min) — re-arms everything if an OEM kills the app.</td></tr>
+  <tr><td class="file">CurfewAdminReceiver.kt</td><td>DeviceAdminReceiver — unlocks the <code>force-lock</code> policy.</td></tr>
+  <tr><td class="file">BootReceiver.kt</td><td>Restarts the service after reboot / update.</td></tr>
+  <tr><td class="file">MainActivity.kt</td><td>Minimal Leanback launcher screen: enable admin, start service, test-lock button.</td></tr>
+  <tr><td class="file">res/xml/device_admin.xml</td><td>Declares the <code>&lt;force-lock/&gt;</code> policy.</td></tr>
+  <tr><td class="file">AndroidManifest.xml</td><td>Permissions, leanback launcher, FGS <code>specialUse</code>, admin + boot receivers.</td></tr>
+  <tr><td class="file">app/src/test/&hellip;/CurfewLogicTest.kt</td><td>9 JUnit tests over the curfew boundaries.</td></tr>
+</table>
+
+<!-- ============ STEPS DONE ============ -->
+<h2>4&nbsp;&middot;&nbsp;Every step that was run</h2>
+
+<div class="step"><div class="num">1</div><div>
+  <b>Inspected the local SDK.</b> Found <code>adb</code>, <code>emulator</code>, build-tools 34/35/36,
+  platforms 34&ndash;36. Missing: <code>cmdline-tools</code> and any TV system image. Only JDK 23 present.
+</div></div>
+<div class="step"><div class="num">2</div><div>
+  <b>Installed the toolchain gaps.</b> Downloaded command-line tools, accepted licenses, and pulled the
+  <span class="tag">system-images;android-34;android-tv;arm64-v8a</span> image (Apple-silicon native).
+</div></div>
+<div class="step"><div class="num">3</div><div>
+  <b>Scaffolded a Gradle project</b> pinned to Gradle 8.13 + AGP 8.9 + Kotlin 2.1 (a combo that runs on JDK 23),
+  with <em>zero</em> third-party runtime deps — pure framework Kotlin.
+</div></div>
+<div class="step"><div class="num">4</div><div><b>Wrote the app</b> (the files in §3) and built the debug APK:</div></div>
+<pre><span class="c"># from ~/Projects/tv-curfew</span>
+./gradlew :app:assembleDebug
+<span class="g">BUILD SUCCESSFUL in 1m 2s</span>
+<span class="c"># -> app/build/outputs/apk/debug/app-debug.apk</span></pre>
+
+<div class="step"><div class="num">5</div><div><b>Created &amp; booted a TV emulator</b>, headless:</div></div>
+<pre>avdmanager create avd -n tv_curfew -k "system-images;android-34;android-tv;arm64-v8a" -d tv_1080p
+emulator -avd tv_curfew -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+<span class="g">INFO | Boot completed in 19157 ms</span></pre>
+
+<div class="step"><div class="num">6</div><div><b>Installed, granted device admin, started the service</b> — all via ADB, no clicking:</div></div>
+<pre>adb install -r -g app-debug.apk                                  <span class="g">Success</span>
+adb shell dpm set-active-admin com.tatav.tvcurfew/.CurfewAdminReceiver
+<span class="g">Success: Active admin set to component com.tatav.tvcurfew/.CurfewAdminReceiver</span>
+adb shell am start-foreground-service com.tatav.tvcurfew/.CurfewService</pre>
+
+<!-- ============ RESULTS ============ -->
+<h2>5&nbsp;&middot;&nbsp;What the tests proved</h2>
+
+<h3>Live on the emulator — device clock was 23:03 (inside curfew)</h3>
+<pre><span class="c"># service started -> immediately locked to standby</span>
+<span class="y">I TvCurfew: enforce(service_start): IN curfew -&gt; lockNow()</span>
+$ adb shell dumpsys power | grep mWakefulness
+  <span class="g">mWakefulness=Asleep</span>            <span class="c"># TV is in standby</span>
+
+<span class="c"># simulate someone turning the TV on with the remote</span>
+$ adb shell input keyevent KEYCODE_WAKEUP
+  mWakefulness=Dozing            <span class="c"># woke for a moment...</span>
+<span class="y">D TvCurfew: screen event: android.intent.action.SCREEN_ON</span>
+<span class="y">I TvCurfew: enforce(screen_on): IN curfew -&gt; lockNow()</span>
+  <span class="g">mWakefulness=Asleep</span>            <span class="c"># ...forced straight back to standby</span></pre>
+<div class="callout ok">This is the whole feature working: turn it on during curfew &rarr; it dies again, no prompt.</div>
+
+<h3>The 9 PM&ndash;10 AM boundary — 9 unit tests (both branches)</h3>
+<pre>./gradlew :app:testDebugUnitTest
+<span class="g">&lt;testsuite name="CurfewLogicTest" tests="9" failures="0" errors="0" /&gt;</span></pre>
+<table>
+  <tr><th>Time</th><th>In curfew?</th><th>Time</th><th>In curfew?</th></tr>
+  <tr><td>9:00 PM</td><td class="ok-t">YES &rarr; lock</td><td>10:00 AM</td><td>no &rarr; allowed</td></tr>
+  <tr><td>11:03 PM</td><td class="ok-t">YES &rarr; lock</td><td>12:00 noon</td><td>no &rarr; allowed</td></tr>
+  <tr><td>midnight</td><td class="ok-t">YES &rarr; lock</td><td>2:00 PM</td><td>no &rarr; allowed</td></tr>
+  <tr><td>3:00 AM</td><td class="ok-t">YES &rarr; lock</td><td>8:59 PM</td><td>no &rarr; allowed</td></tr>
+  <tr><td>9:59 AM</td><td class="ok-t">YES &rarr; lock</td><td>&mdash;</td><td>&mdash;</td></tr>
+</table>
+<p class="tag">Note: the out-of-curfew branch is verified by unit test rather than on-device, because the
+emulator force-syncs its guest clock to the host and blocks <code>date</code> writes without root.</p>
+
+<h3>Watchdog registered &amp; persisted in the system scheduler</h3>
+<pre><span class="y">D TvCurfew: watchdog worker scheduled (15 min)</span>
+$ adb shell dumpsys jobscheduler | grep tvcurfew
+  <span class="g">JOB #u0a122/2: com.tatav.tvcurfew/androidx.work.impl.background.systemjob.SystemJobService</span>
+  <span class="g">##u0a122/2 from u0a122 active: com.tatav.tvcurfew [RUN_ANY_IN_BACKGROUND allowed] RUNNABLE</span></pre>
+<div class="callout ok">The periodic job lives in Android&rsquo;s own JobScheduler, so it outlives the app process
+and is re-registered automatically after a reboot.</div>
+
+<!-- ============ REAL TV ============ -->
+<h2>6&nbsp;&middot;&nbsp;Putting it on your real Android TV</h2>
+<div class="step"><div class="num">1</div><div>On the TV: <b>Settings &rarr; Device Preferences &rarr; About</b>, click <b>Build</b> 7&times; to unlock
+  Developer options, then enable <b>USB/Network debugging</b>.</div></div>
+<div class="step"><div class="num">2</div><div>From your Mac, on the same network:</div></div>
+<pre>adb connect &lt;TV-IP-address&gt;:5555
+adb install -r ~/Projects/tv-curfew/app/build/outputs/apk/debug/app-debug.apk
+<span class="c"># grant the lock permission (works from adb shell, no root needed):</span>
+adb shell dpm set-active-admin com.tatav.tvcurfew/.CurfewAdminReceiver
+adb shell am start-foreground-service com.tatav.tvcurfew/.CurfewService</pre>
+<div class="step"><div class="num">3</div><div>Alternatively, open the <b>TV Curfew</b> app from the launcher and press
+  <b>&ldquo;1. Enable Device Admin&rdquo;</b>, then <b>&ldquo;2. Start service&rdquo;</b>. Done — it now runs headless forever.</div></div>
+
+<h3>To remove it later</h3>
+<pre>adb shell dpm remove-active-admin com.tatav.tvcurfew/.CurfewAdminReceiver
+adb uninstall com.tatav.tvcurfew</pre>
+
+<!-- ============ LIMITS ============ -->
+<h2>7&nbsp;&middot;&nbsp;Honest limitations</h2>
+<ul>
+  <li><b>Standby, not a true power-off.</b> The panel backlight goes off and the system sleeps, exactly like
+    the power button. A genuine cord-level shutdown is impossible without root — if your TV is rooted,
+    swap <code>lockNow()</code> for <code>Runtime.getRuntime().exec("su -c reboot -p")</code>.</li>
+  <li><b>Uses the device clock.</b> If someone changes the TV's time, the window shifts with it.</li>
+  <li><b>OEM battery/power managers</b> on some TVs may kill background services. This is handled by the
+    <b>WorkManager watchdog</b> (boot receiver + foreground service + <code>START_STICKY</code> + a persisted
+    15-minute periodic worker that re-locks and re-arms everything). Worst-case re-lock latency if the whole
+    app is killed is therefore ~15&nbsp;min; instant otherwise. If a vendor is extremely aggressive, also
+    whitelist the app from battery optimization.</li>
+  <li><b>Change the hours</b> in one place: <code>START_HOUR</code> / <code>END_HOUR</code> in
+    <code>CurfewLogic.kt</code>, then rebuild.</li>
+</ul>
+
+<footer>
+  Built from the CLI on an Apple-silicon Mac &middot; verified on the Android TV (API 34) emulator.<br>
+  Project at <code>~/Projects/tv-curfew</code> &middot; APK at <code>app/build/outputs/apk/debug/app-debug.apk</code>
+</footer>
+
+</div>
+</body>
+</html>
