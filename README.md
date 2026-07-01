@@ -12,7 +12,11 @@
 [![Root](https://img.shields.io/badge/root-not%20required-3fb950)](#)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[![Download APK](https://img.shields.io/badge/⬇%20Download-app--debug.apk-ffd54f?style=for-the-badge&logoColor=black)](https://github.com/tatavarthitarun/tv-curfew/releases/latest/download/tv-curfew.apk)
+[![Download APK](https://img.shields.io/badge/⬇%20Download-app-ffd54f?style=for-the-badge&logoColor=black)](https://github.com/tatavarthitarun/tv-curfew/releases/latest/download/tv-curfew.apk)
+&nbsp;
+[![Live page](https://img.shields.io/badge/🌙%20See%20the-live%20page-3fb950?style=for-the-badge)](https://tatavarthitarun.github.io/tv-curfew/)
+
+**👉 [Open the friendly, illustrated live page →](https://tatavarthitarun.github.io/tv-curfew/)**
 
 </div>
 
@@ -104,8 +108,8 @@ Tested live on an Android TV emulator (API 34) with the clock inside the curfew 
 - Watchdog registered in the system JobScheduler: `JOB … com.tatav.tvcurfew/…SystemJobService … RUNNABLE` ✅
 - 9/9 unit tests pass (both curfew and allowed branches) ✅
 
-📖 Full illustrated walkthrough — the constraint, architecture, and every command with its real output — is in
-**[`EXPLAINER.html`](EXPLAINER.html)** ([open rendered](https://htmlpreview.github.io/?https://github.com/tatavarthitarun/tv-curfew/blob/main/EXPLAINER.html)).
+📖 Full illustrated walkthrough — the constraint, architecture, and proof it works — lives on the
+**[live page →](https://tatavarthitarun.github.io/tv-curfew/)** (source: [`EXPLAINER.html`](EXPLAINER.html)).
 
 ---
 
